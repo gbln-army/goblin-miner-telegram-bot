@@ -1,164 +1,77 @@
 from flask import Flask, request
-import json
-import time
-import os
+import telegram, os, json, time
 
-import telegram
-from telegram import Update
-from telegram.ext import Dispatcher, CommandHandler
-
+TOKEN = os.environ.get("BOT_TOKEN", "ISI_TOKEN_BOT")
+bot = telegram.Bot(token=TOKEN)
 app = Flask(__name__)
-BOT_TOKEN = "8113003394:AAEddpjvPAxXu5EE_60xgJ43XqWj7-3bOcw"
-bot = telegram.Bot(token=BOT_TOKEN)
 
-DATA_FILE = "data.json"
-CLAIM_INTERVAL = 8 * 60 * 60  # 8 jam (detik)
+DATA_FILE = "userdata.json"
+MINE_COOLDOWN = 8 * 60 * 60  # 8 jam dalam detik
+MINE_REWARD = 10
 
+# Load data user dari file
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
+# Simpan data user ke file
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
-def calculate_level(total_gbln):
-    if total_gbln >= 50000:
-        return 50
-    elif total_gbln >= 25000:
-        return 40
-    elif total_gbln >= 10000:
-        return 30
-    elif total_gbln >= 5000:
-        return 20
-    elif total_gbln >= 2000:
-        return 10
-    elif total_gbln >= 1000:
-        return 5
-    elif total_gbln >= 500:
-        return 3
-    else:
-        return 1
-
-def get_claim_amount(level):
-    if level >= 50:
-        return 50
-    elif level >= 30:
-        return 30
-    elif level >= 10:
-        return 20
-    else:
-        return 10
-
-def start(update, context):
-    user = update.effective_user
-    data = load_data()
-    uid = str(user.id)
-
-    if uid not in data:
-        data[uid] = {
-            "balance": 0,
-            "total_mined": 0,
-            "last_claim": 0,
-            "referrals": [],
-            "ref_by": None
-        }
-
-        if context.args:
-            ref = context.args[0]
-            if ref != uid and ref not in data[uid]["referrals"]:
-                data[uid]["ref_by"] = ref
-                if ref in data:
-                    data[ref]["referrals"].append(uid)
-                    data[ref]["balance"] += 20
-
-    save_data(data)
-    update.message.reply_text("🟢 Bot Goblin Miner aktif!\nKetik /claim untuk mulai menambang GBLN.")
-
-def claim(update, context):
-    user = update.effective_user
-    uid = str(user.id)
-    data = load_data()
-
-    if uid not in data:
-        update.message.reply_text("Ketik /start dulu bro.")
-        return
-
-    now = int(time.time())
-    last = data[uid]["last_claim"]
-
-    if now - last < CLAIM_INTERVAL:
-        remaining = CLAIM_INTERVAL - (now - last)
-        hours = remaining // 3600
-        minutes = (remaining % 3600) // 60
-        update.message.reply_text(f"Tunggu {hours} jam {minutes} menit lagi buat klaim.")
-        return
-
-    level = calculate_level(data[uid]["total_mined"])
-    amount = get_claim_amount(level)
-
-    data[uid]["balance"] += amount
-    data[uid]["total_mined"] += amount
-    data[uid]["last_claim"] = now
-
-    # Passive income ke referrer
-    ref = data[uid]["ref_by"]
-    if ref and ref in data:
-        bonus = int(amount * 0.15)
-        data[ref]["balance"] += bonus
-
-    save_data(data)
-    update.message.reply_text(f"✅ Kamu klaim {amount} GBLN!\nLevel: {level}")
-
-def balance(update, context):
-    user = update.effective_user
-    uid = str(user.id)
-    data = load_data()
-
-    if uid not in data:
-        update.message.reply_text("Ketik /start dulu bro.")
-        return
-
-    bal = data[uid]["balance"]
-    mined = data[uid]["total_mined"]
-    level = calculate_level(mined)
-
-    update.message.reply_text(
-        f"💰 Balance: {bal} GBLN\n⛏ Total Mining: {mined} GBLN\n🏅 Level: {level}"
-    )
-
-def referral(update, context):
-    user = update.effective_user
-    uid = str(user.id)
-    data = load_data()
-
-    if uid not in data:
-        update.message.reply_text("Ketik /start dulu bro.")
-        return
-
-    update.message.reply_text(
-        f"👥 Referral link:\nhttps://t.me/GoblinMiners_Rush?start={uid}\n\n"
-        f"🎁 +20 GBLN / teman & 15% passive income!"
-    )
-
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+@app.route("/", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
+    chat_id = str(update.message.chat.id)
+    text = update.message.text
+
+    data = load_data()
+    if chat_id not in data:
+        data[chat_id] = {
+            "balance": 0,
+            "last_mine": 0,
+            "ref": None
+        }
+
+    if text == "/start":
+        msg = "👋 Selamat datang di Goblin Miners Rush!\n\nKetik /mine untuk mulai menambang GBLN.\nGunakan /invite untuk undang teman dan dapat bonus!\nKetik /help untuk info lengkap."
+        bot.send_message(chat_id=chat_id, text=msg)
+
+    elif text == "/help":
+        msg = "📜 *Bantuan*\n\n" \
+              "/mine – Klaim GBLN setiap 8 jam\n" \
+              "/balance – Lihat saldo GBLN kamu\n" \
+              "/invite – Dapatkan link referral dan bonus\n" \
+              "/start – Mulai ulang bot\n"
+        bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+
+    elif text == "/invite":
+        username = update.message.from_user.username or chat_id
+        ref_link = f"https://t.me/GoblinMiners_Rush?start={username}"
+        msg = f"💌 Ajak teman kamu ke Goblin Miners!\n\nLink kamu: {ref_link}\n\nSetiap teman yang bergabung, kamu dapat +20 GBLN dan 15% dari hasil tambang mereka!"
+        bot.send_message(chat_id=chat_id, text=msg)
+
+    elif text == "/balance":
+        saldo = data[chat_id]["balance"]
+        bot.send_message(chat_id=chat_id, text=f"💰 Saldo kamu: {saldo} GBLN")
+
+    elif text == "/mine":
+        now = int(time.time())
+        last = data[chat_id]["last_mine"]
+        if now - last >= MINE_COOLDOWN:
+            data[chat_id]["balance"] += MINE_REWARD
+            data[chat_id]["last_mine"] = now
+            save_data(data)
+            bot.send_message(chat_id=chat_id, text=f"⛏️ Kamu berhasil menambang {MINE_REWARD} GBLN!")
+        else:
+            remaining = MINE_COOLDOWN - (now - last)
+            jam = remaining // 3600
+            menit = (remaining % 3600) // 60
+            bot.send_message(chat_id=chat_id, text=f"⏳ Kamu harus menunggu {jam} jam {menit} menit sebelum menambang lagi.")
+
+    else:
+        bot.send_message(chat_id=chat_id, text="Perintah tidak dikenal. Ketik /help untuk daftar perintah.")
+
     return "ok"
-
-@app.route("/")
-def index():
-    return "Bot Goblin Miner jalan!"
-
-from telegram.ext import Dispatcher
-dispatcher = Dispatcher(bot, None, workers=0)
-dispatcher.add_handler(CommandHandler("start", start, pass_args=True))
-dispatcher.add_handler(CommandHandler("claim", claim))
-dispatcher.add_handler(CommandHandler("balance", balance))
-dispatcher.add_handler(CommandHandler("referral", referral))
-
-if __name__ == "__main__":
-    app.run(port=10000)
