@@ -1,12 +1,13 @@
 from flask import Flask, request
-import telegram, os, json, time
+from telegram import Bot, Update
+import os, json, time
 
 TOKEN = os.environ.get("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
-bot = telegram.Bot(token=TOKEN)
+bot = Bot(token=TOKEN)
 app = Flask(__name__)
 
 DATA_FILE = "userdata.json"
-MINE_COOLDOWN = 8 * 60 * 60  # 8 hours in seconds
+MINE_COOLDOWN = 8 * 60 * 60  # 8 hours
 MINE_REWARD = 10
 
 # Load user data
@@ -23,7 +24,7 @@ def save_data(data):
 
 @app.route("/", methods=["POST"])
 def webhook():
-    update = telegram.Update.de_json(request.get_json(force=True), bot)
+    update = Update.de_json(request.get_json(force=True), bot)
     chat_id = str(update.message.chat.id)
     text = update.message.text
 
