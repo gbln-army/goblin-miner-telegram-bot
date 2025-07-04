@@ -1,22 +1,22 @@
 from flask import Flask, request
 import telegram, os, json, time
 
-TOKEN = os.environ.get("BOT_TOKEN", "ISI_TOKEN_BOT")
+TOKEN = os.environ.get("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 bot = telegram.Bot(token=TOKEN)
 app = Flask(__name__)
 
 DATA_FILE = "userdata.json"
-MINE_COOLDOWN = 8 * 60 * 60  # 8 jam dalam detik
+MINE_COOLDOWN = 8 * 60 * 60  # 8 hours in seconds
 MINE_REWARD = 10
 
-# Load data user dari file
+# Load user data
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-# Simpan data user ke file
+# Save user data
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
@@ -36,26 +36,26 @@ def webhook():
         }
 
     if text == "/start":
-        msg = "👋 Selamat datang di Goblin Miners Rush!\n\nKetik /mine untuk mulai menambang GBLN.\nGunakan /invite untuk undang teman dan dapat bonus!\nKetik /help untuk info lengkap."
+        msg = "👋 Welcome to Goblin Miners Rush!\n\nType /mine to earn GBLN every 8 hours.\nUse /invite to refer friends and earn bonuses!\nType /help for more commands."
         bot.send_message(chat_id=chat_id, text=msg)
 
     elif text == "/help":
-        msg = "📜 *Bantuan*\n\n" \
-              "/mine – Klaim GBLN setiap 8 jam\n" \
-              "/balance – Lihat saldo GBLN kamu\n" \
-              "/invite – Dapatkan link referral dan bonus\n" \
-              "/start – Mulai ulang bot\n"
+        msg = "📖 *Commands List:*\n\n" \
+              "/mine – Mine GBLN every 8 hours\n" \
+              "/balance – Check your GBLN balance\n" \
+              "/invite – Get your referral link\n" \
+              "/start – Restart the bot\n"
         bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
 
     elif text == "/invite":
         username = update.message.from_user.username or chat_id
         ref_link = f"https://t.me/GoblinMiners_Rush?start={username}"
-        msg = f"💌 Ajak teman kamu ke Goblin Miners!\n\nLink kamu: {ref_link}\n\nSetiap teman yang bergabung, kamu dapat +20 GBLN dan 15% dari hasil tambang mereka!"
+        msg = f"💌 Invite your friends to Goblin Miners!\n\nYour referral link:\n{ref_link}\n\nYou’ll earn +20 GBLN and 15% of their mining earnings!"
         bot.send_message(chat_id=chat_id, text=msg)
 
     elif text == "/balance":
-        saldo = data[chat_id]["balance"]
-        bot.send_message(chat_id=chat_id, text=f"💰 Saldo kamu: {saldo} GBLN")
+        balance = data[chat_id]["balance"]
+        bot.send_message(chat_id=chat_id, text=f"💰 Your GBLN balance: {balance}")
 
     elif text == "/mine":
         now = int(time.time())
@@ -64,14 +64,14 @@ def webhook():
             data[chat_id]["balance"] += MINE_REWARD
             data[chat_id]["last_mine"] = now
             save_data(data)
-            bot.send_message(chat_id=chat_id, text=f"⛏️ Kamu berhasil menambang {MINE_REWARD} GBLN!")
+            bot.send_message(chat_id=chat_id, text=f"⛏️ You mined {MINE_REWARD} GBLN!")
         else:
             remaining = MINE_COOLDOWN - (now - last)
-            jam = remaining // 3600
-            menit = (remaining % 3600) // 60
-            bot.send_message(chat_id=chat_id, text=f"⏳ Kamu harus menunggu {jam} jam {menit} menit sebelum menambang lagi.")
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
+            bot.send_message(chat_id=chat_id, text=f"⏳ You need to wait {hours}h {minutes}m before mining again.")
 
     else:
-        bot.send_message(chat_id=chat_id, text="Perintah tidak dikenal. Ketik /help untuk daftar perintah.")
+        bot.send_message(chat_id=chat_id, text="❓ Unknown command. Type /help for available commands.")
 
     return "ok"
